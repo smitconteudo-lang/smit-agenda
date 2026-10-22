@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "date": "2026-10-22",
+  "timezone": "America/Sao_Paulo",
+  "github_owner": "smitconteudo-lang",
+  "github_repository": "smitconteudo-lang/smit-agenda",
+  "database_migrations_applied": [
+    "smit_agenda_initial",
+    "smit_agenda_member_access"
+  ],
+  "code_pushed": true,
+  "new_code_deployed": false,
+  "login_live_tested": false,
+  "local_tests_passed": 4,
+  "remote_sql_save_and_plan_tested_rollback": true,
+  "social_accounts_connected": 0,
+  "publishing_enabled": false,
+  "worker_implemented": false,
+  "media_upload_implemented": false,
+  "metrics_collection_implemented": false,
+  "next_step": "Vincular este repositório ao projeto Netlify agendamentos-smit; configurar retorno do Supabase Auth e testar implantação, login e persistência.",
+  "github_visibility": "public"
+}
