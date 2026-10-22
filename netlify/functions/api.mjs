@@ -1,4 +1,5 @@
 import {csrf,equal,cookieToken,sameOrigin,allowedEmail,localDate} from '../../src/security.mjs';
+import {metaRoute,configured as metaConfigured} from '../../src/meta.mjs';
 const env=k=>globalThis.Netlify?.env?.get(k)??process.env[k];
 const failure=(status,message)=>Object.assign(new Error(message),{status});
 const headers={'Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
@@ -6,7 +7,7 @@ const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status
 async function fetchJSON(url,options={}){let res;try{res=await fetch(url,{...options,signal:AbortSignal.timeout(12000)});}catch{throw failure(502,'O serviço não confirmou a resposta. Atualize antes de repetir.');}const data=await res.json().catch(()=>null);return {res,data};}
 export default async function handler(req){try{
  const url=new URL(req.url),path=url.pathname.replace(/^\/api/,'');
- if(path==='/health'&&req.method==='GET')return json({ok:true,version:'0.2.0',publishing_enabled:false,worker_enabled:false,database_configured:!!env('SMIT_SUPABASE_URL')&&!!env('SMIT_SUPABASE_PUBLISHABLE_KEY')});
+ if(path==='/health'&&req.method==='GET')return json({ok:true,version:'0.3.0',publishing_enabled:false,worker_enabled:false,meta_configured:metaConfigured(env),database_configured:!!env('SMIT_SUPABASE_URL')&&!!env('SMIT_SUPABASE_PUBLISHABLE_KEY')});
  const base=env('SMIT_BASE_URL'),supa=env('SMIT_SUPABASE_URL'),key=env('SMIT_SUPABASE_PUBLISHABLE_KEY'),allowed=env('SMIT_ALLOWED_EMAILS');
  if(!base||!supa||!key||!allowed)throw failure(503,'Conclua a configuração da instalação no Netlify.');
  if(!['GET','POST'].includes(req.method))throw failure(405,'Método não permitido.');
@@ -28,6 +29,7 @@ export default async function handler(req){try{
  if(req.method==='POST'&&!equal(req.headers.get('X-CSRF-Token'),me.csrf))throw failure(403,'Atualize a página antes de continuar.');
  if(path==='/me'&&req.method==='GET')return json(me);
  if(path==='/logout'&&req.method==='POST')return json({ok:true},200,{'Set-Cookie':'__Host-smit_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'});
+ if(path.startsWith('/oauth/')||path.startsWith('/accounts/'))return await metaRoute({req,url,path,body,me,env,json});
  async function db(path,method='GET',data){const r=await fetchJSON(supa+'/rest/v1/'+path,{method,headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:data===undefined?undefined:JSON.stringify(data)});if(!r.res.ok){if(r.data?.code==='40001')throw failure(409,'A publicação mudou em outra sessão. Atualize a página.');throw failure(502,'O banco não confirmou a operação. Confira as permissões e atualize antes de repetir.');}return r.data;}
  if(path==='/workspace'&&req.method==='GET'){
   const [settings,posts,accounts,reports]=await Promise.all([db('smit_settings?select=brand&id=eq.workspace'),db('smit_posts?select=payload&order=updated_at.desc&limit=500'),db('smit_accounts?select=id,channel,remote_id,name,handle,verified_at,publishing_enabled'),db('smit_reports?select=payload&order=observed_at.desc&limit=100')]);

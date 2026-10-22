@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "date": "2026-10-22",
   "timezone": "America/Sao_Paulo",
   "github_owner": "smitconteudo-lang",
@@ -11,13 +11,16 @@
   "code_pushed": true,
   "new_code_deployed": false,
   "login_live_tested": false,
-  "local_tests_passed": 4,
+  "local_tests_passed": 6,
   "remote_sql_save_and_plan_tested_rollback": true,
   "social_accounts_connected": 0,
   "publishing_enabled": false,
   "worker_implemented": false,
   "media_upload_implemented": false,
   "metrics_collection_implemented": false,
-  "next_step": "Vincular este repositório ao projeto Netlify agendamentos-smit; configurar retorno do Supabase Auth e testar implantação, login e persistência.",
-  "github_visibility": "public"
+  "next_step": "Autorizar armazenamento dos segredos Meta/Supabase no Netlify, aplicar variáveis e uma implantação; validar login e autorização real.",
+  "github_visibility": "public",
+  "deployed_version": "0.2.0",
+  "meta_oauth_implemented": true,
+  "meta_credentials_configured": false
 }
