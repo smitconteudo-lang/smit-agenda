@@ -10,7 +10,7 @@ test('tokens cifrados recusam adulteração, outra conta e outra chave',()=>{
 });
 
 test('OAuth vincula estado ao usuário, impede repetição e só salva ativos selecionados',async()=>{
- const config={SMIT_BASE_URL:'https://smit.example',SMIT_SUPABASE_URL:'https://db.example',SMIT_SUPABASE_SECRET_KEY:'sb_secret_TEST',SMIT_META_APP_ID:'123',SMIT_META_APP_SECRET:'app-secret',SMIT_META_CONFIG_ID:'456',SMIT_META_API_VERSION:'v25.0',SMIT_TOKEN_ENCRYPTION_KEY:'ab'.repeat(32)};
+ const config={SMIT_BASE_URL:'https://smit.example',SMIT_SUPABASE_URL:'https://db.example',SMIT_SUPABASE_SECRET_KEY:'sb_secret_TEST',SMIT_META_APP_ID:'123',SMIT_META_APP_SECRET:'app-secret',SMIT_META_CONFIG_ID:'456',SMIT_META_API_VERSION:'v99.0',SMIT_TOKEN_ENCRYPTION_KEY:'ab'.repeat(32)};
  const rows=[],accounts=[],secrets=[],seen=[];
  const fetcher=async(target,options={})=>{
   const url=new URL(target),body=options.body&&options.headers?.['Content-Type']==='application/json'?JSON.parse(options.body):null;seen.push({url,options});
