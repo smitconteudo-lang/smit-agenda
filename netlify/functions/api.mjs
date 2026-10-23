@@ -1,5 +1,6 @@
 import {csrf,equal,cookieToken,sameOrigin,allowedEmail,localDate} from '../../src/security.mjs';
 import {metaRoute,configured as metaConfigured} from '../../src/meta.mjs';
+import {providerRoute,providerStatus} from '../../src/providers.mjs';
 const env=k=>globalThis.Netlify?.env?.get(k)??process.env[k];
 const failure=(status,message)=>Object.assign(new Error(message),{status});
 const headers={'Cache-Control':'no-store','Content-Type':'application/json','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
@@ -7,7 +8,7 @@ const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status
 async function fetchJSON(url,options={}){let res;try{res=await fetch(url,{...options,signal:AbortSignal.timeout(12000)});}catch{throw failure(502,'O serviço não confirmou a resposta. Atualize antes de repetir.');}const data=await res.json().catch(()=>null);return {res,data};}
 export default async function handler(req){try{
  const url=new URL(req.url),path=url.pathname.replace(/^\/api/,'');
- if(path==='/health'&&req.method==='GET')return json({ok:true,version:'0.3.0',publishing_enabled:false,worker_enabled:false,meta_configured:metaConfigured(env),database_configured:!!env('SMIT_SUPABASE_URL')&&!!env('SMIT_SUPABASE_PUBLISHABLE_KEY')});
+ if(path==='/health'&&req.method==='GET')return json({ok:true,version:'0.4.0',publishing_enabled:false,worker_enabled:false,meta_configured:metaConfigured(env),providers:providerStatus(env),database_configured:!!env('SMIT_SUPABASE_URL')&&!!env('SMIT_SUPABASE_PUBLISHABLE_KEY')});
  const base=env('SMIT_BASE_URL'),supa=env('SMIT_SUPABASE_URL'),key=env('SMIT_SUPABASE_PUBLISHABLE_KEY'),allowed=env('SMIT_ALLOWED_EMAILS');
  if(!base||!supa||!key||!allowed)throw failure(503,'Conclua a configuração da instalação no Netlify.');
  if(!['GET','POST'].includes(req.method))throw failure(405,'Método não permitido.');
@@ -29,11 +30,13 @@ export default async function handler(req){try{
  if(req.method==='POST'&&!equal(req.headers.get('X-CSRF-Token'),me.csrf))throw failure(403,'Atualize a página antes de continuar.');
  if(path==='/me'&&req.method==='GET')return json(me);
  if(path==='/logout'&&req.method==='POST')return json({ok:true},200,{'Set-Cookie':'__Host-smit_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'});
- if(path.startsWith('/oauth/')||path.startsWith('/accounts/'))return await metaRoute({req,url,path,body,me,env,json});
+ if(path==='/oauth/pending'||/^\/oauth\/(google|linkedin)\//.test(path))return await providerRoute({req,url,path,body,me,env,json});
+ if(path.startsWith('/oauth/meta/'))return await metaRoute({req,url,path,body,me,env,json});
+ if(path.startsWith('/accounts/')){const match=path.match(/^\/accounts\/([0-9a-f-]{36})\/verify$/i);if(!match)throw failure(404,'Operação de conta não disponível.');const accounts=await db('smit_accounts?id=eq.'+match[1]+'&select=channel');if(accounts.length!==1)throw failure(404,'Conta não encontrada.');const handler=['youtube','linkedin'].includes(accounts[0].channel)?providerRoute:metaRoute;return await handler({req,url,path,body,me,env,json});}
  async function db(path,method='GET',data){const r=await fetchJSON(supa+'/rest/v1/'+path,{method,headers:{apikey:key,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},body:data===undefined?undefined:JSON.stringify(data)});if(!r.res.ok){if(r.data?.code==='40001')throw failure(409,'A publicação mudou em outra sessão. Atualize a página.');throw failure(502,'O banco não confirmou a operação. Confira as permissões e atualize antes de repetir.');}return r.data;}
  if(path==='/workspace'&&req.method==='GET'){
-  const [settings,posts,accounts,reports]=await Promise.all([db('smit_settings?select=brand&id=eq.workspace'),db('smit_posts?select=payload&order=updated_at.desc&limit=500'),db('smit_accounts?select=id,channel,remote_id,name,handle,verified_at,publishing_enabled'),db('smit_reports?select=payload&order=observed_at.desc&limit=100')]);
-  return json({brand:settings[0]?.brand||{name:'SMIT',guidelines:''},posts:posts.map(x=>x.payload),accounts:accounts.map(a=>({...a,verified:!!a.verified_at})),reports:reports.map(x=>x.payload)});
+  const [settings,posts,accounts,reports]=await Promise.all([db('smit_settings?select=brand&id=eq.workspace'),db('smit_posts?select=payload&order=updated_at.desc&limit=500'),db('smit_accounts?select=id,channel,remote_id,name,handle,scopes,verified_at,publishing_enabled'),db('smit_reports?select=payload&order=observed_at.desc&limit=100')]);
+  return json({connections:providerStatus(env),capabilities:{publishing:false,metrics_collection:false},brand:settings[0]?.brand||{name:'SMIT',guidelines:''},posts:posts.map(x=>x.payload),accounts:accounts.map(a=>({id:a.id,channel:a.channel,remote_id:a.remote_id,name:a.name,handle:a.handle,verified_at:a.verified_at,publishing_enabled:a.publishing_enabled,verified:!!a.verified_at,insights:a.scopes.some(s=>['instagram_manage_insights','read_insights','r_organization_social','https://www.googleapis.com/auth/yt-analytics.readonly'].includes(s))})),reports:reports.map(x=>x.payload)});
  }
  if(path==='/brand'&&req.method==='POST'){
   if(typeof body.name!=='string'||!body.name.trim()||body.name.length>80||typeof body.guidelines!=='string'||body.guidelines.length>12000)throw failure(400,'Orientações inválidas.');
