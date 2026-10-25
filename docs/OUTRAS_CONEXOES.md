@@ -8,7 +8,7 @@ servidor. A interface recebe somente identificadores e nomes dos ativos.
 ## Google / YouTube
 
 1. No Google Cloud, use um projeto da equipe e aceite os termos aplicáveis.
-2. Ative YouTube Data API v3 e YouTube Analytics API.
+2. Ative YouTube Data API v3. Métricas serão configuradas depois.
 3. Configure a tela de consentimento OAuth. Se estiver em teste, cadastre os
    usuários da equipe que vão autorizar. As limitações de testes do Google se
    aplicam, inclusive à duração das credenciais.
@@ -17,8 +17,9 @@ servidor. A interface recebe somente identificadores e nomes dos ativos.
 6. Salve SMIT_GOOGLE_CLIENT_ID e SMIT_GOOGLE_CLIENT_SECRET nas variáveis do
    projeto Netlify, somente em Production. O segredo nunca pertence ao HTML.
 
-O conector solicita youtube.readonly e yt-analytics.readonly, sem permissão de
-envio ou exclusão de vídeos. A lista de canais usa `mine=true`: um canal público
+O conector solicita youtube.readonly e youtube.force-ssl. O segundo permite
+envio e alteração de vídeos, inclusive visibilidade. É necessário para a etapa
+final videos.update. Autorize somente o canal oficial pretendido. A lista de canais usa `mine=true`: um canal público
 encontrado por busca não comprova autorização. Contas de marca podem exigir
 escolha específica no consentimento do Google. A renovação usa o refresh token;
 se ele expirar ou for revogado, é necessário reconectar.
@@ -41,11 +42,12 @@ apresentados para seleção. O acesso pode depender do produto e nível concedid
 
 ## Publicação, métricas e custos
 
-A conexão não habilita envio automático. O upload, a fila de publicação e a
-coleta de relatórios precisam de implementação e validação separadas. A tela
+A versão 0.5 inclui upload privado, fila e adaptadores de publicação. Uma conta
+só pode ser escolhida para agendamento se tiver a permissão de escrita.
+A coleta de métricas fica para depois. A tela
 mostra configuração, autorização e conta verificada como estados distintos.
 O botão de coleta permanece desabilitado enquanto a funcionalidade não existir.
-Não há consultas periódicas nem chamadas a modelos de IA nesses adaptadores.
+A fila de publicação é consultada a cada minuto. Não há chamadas a modelos de IA.
 
 ## Testes
 

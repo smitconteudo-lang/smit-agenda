@@ -3,7 +3,7 @@ import {hashState,seal,unseal,publicAsset,configured as metaConfigured} from './
 
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 const youtubeScope='https://www.googleapis.com/auth/youtube.readonly';
-const analyticsScope='https://www.googleapis.com/auth/yt-analytics.readonly';
+const publishingScope='https://www.googleapis.com/auth/youtube.force-ssl';
 const linkedInScopes=new Set(['r_organization_admin','rw_organization_admin','r_organization_social','w_organization_social']);
 export function providerStatus(env){
  const storage=['SMIT_SUPABASE_SECRET_KEY','SMIT_TOKEN_ENCRYPTION_KEY'].every(k=>!!env(k));
@@ -20,7 +20,7 @@ export async function providerRoute({req,url,path,body,me,env,json,fetcher=fetch
  const expiresFilter='&expires_at=gt.'+encodeURIComponent(new Date().toISOString());
  const own='user_id=eq.'+encodeURIComponent(me.id);
  const redirect=result=>new Response(null,{status:303,headers:{Location:base+'/?connection='+result+'#accounts','Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});
- const configs={google:{client:env('SMIT_GOOGLE_CLIENT_ID'),secret:env('SMIT_GOOGLE_CLIENT_SECRET'),auth:'https://accounts.google.com/o/oauth2/v2/auth',token:'https://oauth2.googleapis.com/token',scopes:[youtubeScope,analyticsScope]},linkedin:{client:env('SMIT_LINKEDIN_CLIENT_ID'),secret:env('SMIT_LINKEDIN_CLIENT_SECRET'),auth:'https://www.linkedin.com/oauth/v2/authorization',token:'https://www.linkedin.com/oauth/v2/accessToken',scopes:(env('SMIT_LINKEDIN_SCOPES')||'').split(/\s+/).filter(Boolean)}};
+ const configs={google:{client:env('SMIT_GOOGLE_CLIENT_ID'),secret:env('SMIT_GOOGLE_CLIENT_SECRET'),auth:'https://accounts.google.com/o/oauth2/v2/auth',token:'https://oauth2.googleapis.com/token',scopes:[youtubeScope,publishingScope]},linkedin:{client:env('SMIT_LINKEDIN_CLIENT_ID'),secret:env('SMIT_LINKEDIN_CLIENT_SECRET'),auth:'https://www.linkedin.com/oauth/v2/authorization',token:'https://www.linkedin.com/oauth/v2/accessToken',scopes:(env('SMIT_LINKEDIN_SCOPES')||'').split(/\s+/).filter(Boolean)}};
  async function exchange(provider,params){const c=configs[provider];return request(c.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.client,client_secret:c.secret,...params}).toString()});}
  function authHeaders(provider,token){return {Authorization:'Bearer '+token,...(provider==='linkedin'?{'LinkedIn-Version':env('SMIT_LINKEDIN_API_VERSION'),'X-Restli-Protocol-Version':'2.0.0'}:{})};}
  async function assetsFor(provider,token,granted){
