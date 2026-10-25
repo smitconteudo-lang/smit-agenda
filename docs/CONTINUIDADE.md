@@ -1,35 +1,60 @@
-# Continuidade técnica — SMIT Agenda 0.2.0
+# Continuidade técnica — SMIT Agenda 0.5
 
-## Objetivo aceito
+A prioridade é fechar o agendamento nas redes solicitadas antes de desenvolver
+métricas. O sistema deve continuar executando no GitHub, Netlify e Supabase sem
+uma sessão do ChatGPT. Consulte README.md e docs/STATUS.json para os componentes
+implementados. O estado das contas e credenciais é consultado em runtime;
+não o copie para o repositório público.
 
-Agendamento multiplataforma, métricas reais e relatórios, sem Metricool e sem aprovação interna. A aplicação deve executar depois que o usuário perder o acesso temporário ao Work.
+## Fluxo
 
-## Decisão de estrutura
+O navegador entra por link de e-mail e recebe cookie HttpOnly, Secure e SameSite.
+Cada operação mutável valida origem, sessão, membro ativo e token CSRF. A chave
+de serviço fica no servidor. Upload direto usa URL assinada para o bucket privado.
+O backend confirma tamanho, tipo e assinatura do arquivo antes de disponibilizar
+a mídia. O editor salva rascunhos com controle de versão e ordem das mídias.
 
-GitHub para código e histórico; o repositório escolhido pelo usuário, smitconteudo-lang/smit-agenda, está público. Netlify para frontend e funções. Supabase para PostgreSQL e autenticação. Plano gratuito como ponto de partida, sujeito a cotas. Sem API de IA paga nesta versão. Sem dependência de um artefato Claude para publicar.
+Agendar cria uma cópia por conta do texto, mídia e opções escolhidas. O relógio
+consulta trabalho próximo a cada minuto e chama o worker por requisição assinada.
+Uma reserva com prazo e identificador impede duas execuções do mesmo job. Antes
+da chamada de publicação há um marcador durável. Reservas de preparo podem ser
+retomadas; perda da confirmação de publicação vira unknown e não gera reenvio.
+O usuário pode informar o ID da publicação para uma conferência somente de leitura.
+A reconciliação exige conta e conteúdo compatíveis quando a API os disponibiliza.
 
-## Estado em 22/10/2026
+O processamento respeita horário de São Paulo convertido no servidor. O horário
+é o momento mais cedo de envio: a rede pode demorar para processar a mídia.
+Editar uma versão cancela envios pendentes, mas é bloqueado enquanto houver envio
+ou resultado desconhecido. Cancelar a fila não apaga conteúdo já enviado à rede.
 
-GitHub, Supabase e Netlify acessíveis por seus plugins. Supabase `SUPABASE_PROJECT_REF` criado e saudável. Banco e políticas aplicados. Netlify `NETLIFY_SITE_ID`, projeto `agendamentos-smit`, selecionado; quatro parâmetros da aplicação definidos. Código organizado no repositório smitconteudo-lang/smit-agenda, ainda não implantado no Netlify. O conector GitHub atual não oferece criação de repositório; o conector Netlify atual não oferece upload de arquivos de implantação nem vinculação Git. Continuar por ferramentas oficiais, CLI autorizado ou configuração no painel. Não pedir tokens secretos no chat para contornar isso.
+## Validação e pendências
 
-A interface recebida foi adaptada para retirar o fluxo de aprovação, usar as cores da SMIT e selecionar redes. O backend Python dos anexos não executa neste pacote; foi substituído, para login e planejamento, por funções JavaScript. NÃO publicar server.py como se fosse uma função Netlify.
+npm test cobre interface local e online simulada, OAuth, upload, seleção das
+contas, limites por formato, quatro adaptadores, erros de confirmação e assinatura
+do worker. Os provedores nesses testes são simulados. O SQL de teste roda na mesma
+transação da migração e deve terminar em ROLLBACK. Nunca execute fixtures como
+publicações reais. Verifique /api/health e os agendamentos do Netlify após deploy.
 
-## Próximas etapas, em ordem
+Concluir os aplicativos e as autorizações oficiais continua obrigatório. Uma
+permissão de leitura não habilita escrita. Plugins conectados ao ChatGPT não
+transferem tokens para este servidor. A primeira publicação real por formato e
+por rede exige conteúdo autorizado e confirmação no próprio perfil. Não marque
+como validado apenas porque o código ou os testes simulados passaram.
 
-1. Vincular o repositório smitconteudo-lang/smit-agenda ao projeto Netlify existente, configurar o retorno do Supabase Auth e testar login e persistência ao vivo.
-2. Implementar upload persistente de mídias em armazenamento com acesso privado, validação de conteúdo, limite por formato e retenção. Hoje existe somente prévia local. Meta não pode receber uma URL blob: do navegador.
-3. Implementar OAuth Meta no backend Netlify. Criar app oficial da SMIT, callback HTTPS exato, escopos de leitura/publicação adequados, state vinculado à sessão, validade, uso único e seleção explícita de ativos. Guardar tokens cifrados fora do acesso dos clientes. Fechar popup não significa sucesso. Nenhuma conta vem pré-conectada.
-4. Implementar adaptadores de publicação e fila transacional. A tabela smit_jobs existe, mas nenhuma rotina a executa. Validar formatos; escolher contas reais por ID; capturar versão e conteúdo imutáveis por destino; proteger unicidade; distinguir scheduled/processing/unknown/published/failed. A decisão de agendar já autoriza a ação futura; não introduzir aprovação editorial extra.
-5. Registrar marcador de envio antes da chamada que publica. Timeouts com resultado desconhecido ficam unknown e são reconciliados; não reenviar automaticamente conteúdo possivelmente publicado. Somente usar publicado com confirmação e identificador remoto. Ao editar/reagendar, invalidar jobs anteriores de forma atômica.
-6. Executar a fila no servidor, sem depender de aba aberta. Escolher frequência com base nas cotas do Netlify. Cron usa UTC; exibir horários em America/Sao_Paulo. Monitorar execução, erros e última execução. Não usar GitHub Actions como relógio pontual de publicação.
-7. Implementar coleta real de métricas com origem, fuso, intervalo, horário e granularidade. Não somar alcance único diário para obter alcance único mensal; não preencher indisponível com zero. Preservar leituras antigas quando uma nova coleta falhar. Evitar somar consultas sobrepostas.
-8. Expandir para LinkedIn e YouTube por adaptadores e aplicativos próprios, depois de validar permissões e formatos. Essas redes já podem ser selecionadas para planejamento, mas não publicam. TikTok não está incluído no escopo técnico recebido mais recente.
-9. Completar relatórios e análise com dados reais; CSV/JSON já existem para dados carregados. Relatórios PDF e recomendações automáticas ainda não existem.
+TikTok e outras redes solicitadas precisam de adaptadores próprios ou de uma API
+de serviço com acesso explicitamente concedido e condições de custo verificadas.
+Não existe um adaptador universal nem garantia de acesso gratuito a todas as APIs.
+Use a documentação oficial e desenvolva o fluxo independente da interface de
+referência. Métricas, relatórios e recomendações ficam para depois do agendamento.
 
-## Verificação após implantação
+## Cotas e operação
 
-Confirmar versão no /api/health; negar workspace sem login; entrar pelo e-mail autorizado; salvar/editar/planejar e recarregar; testar usuário não autorizado; testar segundo navegador; conferir dados após novo deploy. Não marcar nenhum desses testes como feito antes de executá-los.
+O limite atual de upload é 50 MB por arquivo e de publicação é 10 mídias; imagens
+têm limite de 8 MB. Avalie retenção e remoção de mídias para preservar a cota de
+armazenamento. Credenciais expiradas exigem renovação ou reconexão. Novos destinos
+devem tratar aprovação de aplicativos, formatos, cotas e resultado incerto.
 
-## Prompt para continuar com outro desenvolvedor ou IA
-
-> Continue o repositório SMIT Agenda 0.2.0. Leia README.md, docs/STATUS.json e os arquivos em supabase/. Preserve o escopo: agendamento multiplataforma, métricas e relatórios, sem Metricool e sem aprovação interna. O banco Supabase já está criado e os dois SQLs foram aplicados. O site Netlify existe, mas o novo código ainda não foi implantado no momento deste registro. Valide o estado atual antes de qualquer operação. Use autenticação oficial e segredos no servidor. Não declare contas conectadas, jobs criados, envios ou métricas sem confirmação. Complete uma etapa e seus testes antes de avançar. Atualize este registro com evidências e mantenha todo o código no GitHub da equipe.
+Deploys de produção consomem créditos. Agrupe mudanças; scripts/should-build.mjs
+ignora mudanças apenas em documentação ou SQL. Migrações são aplicadas uma única
+vez e exigem compatibilidade com o código implantado. Não altere políticas para
+liberar tabelas de credenciais, fila ou autorizações ao navegador.

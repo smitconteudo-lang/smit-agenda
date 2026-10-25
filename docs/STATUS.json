@@ -1,26 +1,36 @@
 {
-  "version": "0.3.0",
-  "date": "2026-10-22",
+  "version": "0.5.0",
   "timezone": "America/Sao_Paulo",
-  "github_owner": "smitconteudo-lang",
-  "github_repository": "smitconteudo-lang/smit-agenda",
-  "database_migrations_applied": [
-    "smit_agenda_initial",
-    "smit_agenda_member_access"
+  "implemented": [
+    "private_media_upload",
+    "media_library",
+    "versioned_drafts",
+    "per_account_schedule",
+    "immutable_job_payload",
+    "scheduled_clock",
+    "background_worker",
+    "encrypted_job_progress",
+    "durable_send_fence",
+    "read_only_reconciliation"
   ],
-  "code_pushed": true,
-  "new_code_deployed": false,
-  "login_live_tested": false,
-  "local_tests_passed": 6,
-  "remote_sql_save_and_plan_tested_rollback": true,
-  "social_accounts_connected": 0,
-  "publishing_enabled": false,
-  "worker_implemented": false,
-  "media_upload_implemented": false,
+  "publishing_adapters": [
+    "instagram",
+    "facebook_page",
+    "linkedin",
+    "youtube"
+  ],
+  "other_destinations": "TikTok and additional networks require separate official adapters and authorization.",
   "metrics_collection_implemented": false,
-  "next_step": "Autorizar armazenamento dos segredos Meta/Supabase no Netlify, aplicar variáveis e uma implantação; validar login e autorização real.",
-  "github_visibility": "public",
-  "deployed_version": "0.2.0",
-  "meta_oauth_implemented": true,
-  "meta_credentials_configured": false
+  "tests": {
+    "node_tests": 27,
+    "provider_responses": "simulated",
+    "database_checks": "tests/queue-rollback.sql inside rollback transaction"
+  },
+  "runtime_state": "Inspect authenticated workspace and provider permissions; repository metadata does not confirm connected accounts or actual delivery.",
+  "next_steps": [
+    "Finish official provider authorization",
+    "Validate first authorized real publication per network",
+    "Add remaining requested networks",
+    "Implement metrics only after scheduling"
+  ]
 }
