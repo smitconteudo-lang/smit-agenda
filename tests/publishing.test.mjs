@@ -104,3 +104,18 @@ test('Instagram rejects media processing failure before attempting publication',
 test('Instagram successful HTTP without publication id remains uncertain',async()=>{
  const c=context('instagram',{progress:{container:'private'}});c.fetcher=async u=>String(u).includes('media_publish')?json({success:true}):json({status_code:'FINISHED'});await assert.rejects(()=>advancePublication(c),e=>e.code==='IDENTIFICADOR_AUSENTE'&&e.uncertain);assert.equal(c.fences,1);
 });
+
+test('trial Reel validates Instagram video only and preserves explicit manual sharing',async()=>{
+ const post={caption:'Test',title:'Title',format:'Vídeo / Reel'},account={channel:'instagram',remote_id:'123'};
+ assert.equal(validatePublication(post,account,[video],{trial_reel:true}).options.trial_reel,true);
+ for(const [a,p,o] of [[{channel:'youtube'},post,{trial_reel:true}],[account,{...post,format:'Story'},{trial_reel:true}],[account,post,{trial_reel:'true'}]])assert.throws(()=>validatePublication(p,a,[video],o),/teste/);
+ const c=context('instagram');c.payload=validatePublication(post,account,[video],{trial_reel:true});let containers=0;
+ c.fetcher=async(u,o)=>{if(new URL(u).pathname.endsWith('/media')){containers++;const b=new URLSearchParams(o.body);assert.equal(b.get('media_type'),'REELS');assert.deepEqual(JSON.parse(b.get('trial_params')),{graduation_strategy:'MANUAL'});return json({id:'trial-container'});}if(new URL(u).pathname.endsWith('/media_publish')){assert.equal(c.fences,1);return json({id:'trial-published'});}return json({status_code:'FINISHED'});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.fences,0);assert.equal((await advancePublication(c)).remote_id,'trial-published');assert.equal(containers,1);
+});
+test('Instagram video Story uses STORIES and does not send trial parameters or caption',async()=>{
+ const c=context('instagram');c.payload.format='Story';c.payload.media=[video];
+ c.fetcher=async(u,o)=>{const b=new URLSearchParams(o.body);assert.equal(b.get('media_type'),'STORIES');assert.equal(b.has('trial_params'),false);assert.equal(b.has('caption'),false);return json({id:'story-container'});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.fences,0);
+ c.payload.options.trial_reel=true;await assert.rejects(()=>advancePublication(c),/REEL_TESTE_FORMATO/);
+});
