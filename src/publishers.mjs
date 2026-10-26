@@ -20,12 +20,13 @@ export async function advancePublication(ctx){
  async function bytes(m,start=0,end=m.bytes-1){const u=await ctx.mediaURL(m),r=await raw(u,{headers:{Range:'bytes='+start+'-'+end}});const expected=end-start+1;if((r.status!==206&&expected!==m.bytes)||Number(r.headers.get('Content-Length'))>expected){await r.body?.cancel();throw new ProviderError('ARQUIVO_INTERVALO');}const b=await r.arrayBuffer();if(b.byteLength!==expected||b.byteLength>8*1024*1024)throw new ProviderError('ARQUIVO_TAMANHO');return b;}
  async function checkpoint(){await ctx.checkpoint(s);}
  if(p.channel==='instagram'){
+  if(p.options?.trial_reel&&(p.format!=='Vídeo / Reel'||media.length!==1||media[0]?.mime!=='video/mp4'))throw new ProviderError('REEL_TESTE_FORMATO');
   if(!s.container){
    if(p.format==='Carrossel'){
     s.children=s.children||[];
     for(let i=s.children.length;i<media.length;i++){const c=await graph(p.remote_id+'/media',{image_url:await ctx.mediaURL(media[i]),is_carousel_item:'true'});if(!c.id)throw new ProviderError('CONTAINER_AUSENTE');s.children.push(String(c.id));await checkpoint();}
     const c=await graph(p.remote_id+'/media',{media_type:'CAROUSEL',children:s.children.join(','),caption:p.caption});s.container=c.id;
-   }else{const video=media[0]?.mime==='video/mp4';const params={...(video?{video_url:await ctx.mediaURL(media[0]),media_type:p.format==='Story'?'STORIES':'REELS'}:{image_url:await ctx.mediaURL(media[0]),...(p.format==='Story'?{media_type:'STORIES'}:{})}),...(p.format==='Story'?{}:{caption:p.caption})};const c=await graph(p.remote_id+'/media',params);s.container=c.id;}
+   }else{const video=media[0]?.mime==='video/mp4';const params={...(video?{video_url:await ctx.mediaURL(media[0]),media_type:p.format==='Story'?'STORIES':'REELS'}:{image_url:await ctx.mediaURL(media[0]),...(p.format==='Story'?{media_type:'STORIES'}:{})}),...(p.format==='Story'?{}:{caption:p.caption})};if(p.options?.trial_reel)params.trial_params=JSON.stringify({graduation_strategy:'MANUAL'});const c=await graph(p.remote_id+'/media',params);s.container=c.id;}
    if(!s.container)throw new ProviderError('CONTAINER_AUSENTE');return pending();
   }
   const state=await graph(s.container,{fields:'status_code'},false,'GET');
