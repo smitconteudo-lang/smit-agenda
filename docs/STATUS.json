@@ -22,7 +22,7 @@
   "other_destinations": "TikTok and additional networks require separate official adapters and authorization.",
   "metrics_collection_implemented": false,
   "tests": {
-    "node_tests": 27,
+    "node_tests": 35,
     "provider_responses": "simulated",
     "database_checks": "tests/queue-rollback.sql inside rollback transaction"
   },

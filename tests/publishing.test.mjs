@@ -85,3 +85,22 @@ test('reconciliation only reads the provider and requires matching account and c
  const invoke=()=>reconcile({client,env:config,me:{id:'member'},id:'job',remote:'456',fetcher:async(u,o)=>{assert.equal(o.method,undefined);assert.match(String(u),/\/123\/media/);return json({data:[{id:'456',caption:wrong?'another post':'expected'}]});}});
  assert.equal((await invoke()).confirmed,true);assert.equal(saved,1);wrong=true;await assert.rejects(invoke,/não foi confirmada/);assert.equal(saved,1);
 });
+for(const format of ['Texto','Imagem','Story'])test('Facebook '+format+': no early send; exactly one publishing fence',async()=>{
+ const c=context('facebook_page');c.payload.format=format;c.payload.media=format==='Texto'?[]:[image];c.scheduled_at=new Date(c.now+60000).toISOString();let uploads=0,sends=0;
+ c.fetcher=async(u,o)=>{const url=new URL(u),body=new URLSearchParams(o.body);if(url.pathname.endsWith('/photos')){uploads++;assert.equal(c.fences,0);assert.equal(body.get('published'),'false');return json({id:'photo-private'});}assert.equal(c.fences,1);sends++;if(format==='Story'){assert.ok(url.pathname.endsWith('/photo_stories'));assert.equal(body.get('photo_id'),'photo-private');return json({success:true,post_id:'story-confirmed'});}assert.ok(url.pathname.endsWith('/feed'));assert.equal(body.get('message'),'Confirmed text');return json({id:'feed-confirmed'});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(sends,0);c.scheduled_at=new Date(0).toISOString();assert.equal((await advancePublication(c)).status,'published');assert.equal(sends,1);assert.equal(uploads,format==='Texto'?0:1);
+});
+for(const format of ['Vídeo / Reel','Story'])test('Facebook video '+format+': resume private upload, send once and then only poll',async()=>{
+ const c=context('facebook_page');c.payload.format=format;c.payload.media=[video];c.scheduled_at=new Date(c.now+60000).toISOString();let starts=0,uploads=0,finishes=0;
+ c.fetcher=async(u,o)=>{const url=new URL(u);if(url.hostname==='rupload.facebook.com'){uploads++;assert.equal(c.fences,0);assert.equal(o.headers.file_url,'https://storage.example/private');return json({success:true});}if(!o.method){assert.equal(c.fences,1);return json({status:{publishing_phase:{status:'complete'}}});}const b=new URLSearchParams(o.body);assert.ok(url.pathname.endsWith(format==='Story'?'/video_stories':'/video_reels'));if(b.get('upload_phase')==='start'){starts++;return json({video_id:'video-private',upload_url:'https://rupload.facebook.com/video/test'});}assert.equal(b.get('upload_phase'),'finish');assert.equal(c.fences,1);finishes++;return json({success:true});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal((await advancePublication(c)).status,'pending');assert.equal(finishes,0);c.scheduled_at=new Date(0).toISOString();assert.equal((await advancePublication(c)).status,'confirming');assert.equal((await advancePublication(c)).status,'published');assert.deepEqual([starts,uploads,finishes,c.fences],[1,1,1,1]);
+});
+test('Facebook service error on publication is uncertain and cannot be treated as a safe retry',async()=>{
+ const c=context('facebook_page');c.payload.media=[];c.payload.format='Texto';c.fetcher=async()=>json({error:{message:'temporary'}},503);await assert.rejects(()=>advancePublication(c),e=>e.code==='HTTP_503'&&e.uncertain===true);assert.equal(c.fences,1);
+});
+test('Instagram rejects media processing failure before attempting publication',async()=>{
+ const c=context('instagram',{progress:{container:'private'}});c.fetcher=async()=>json({status_code:'ERROR'});await assert.rejects(()=>advancePublication(c),e=>e.code==='MIDIA_ERROR'&&!e.uncertain);assert.equal(c.fences,0);
+});
+test('Instagram successful HTTP without publication id remains uncertain',async()=>{
+ const c=context('instagram',{progress:{container:'private'}});c.fetcher=async u=>String(u).includes('media_publish')?json({success:true}):json({status_code:'FINISHED'});await assert.rejects(()=>advancePublication(c),e=>e.code==='IDENTIFICADOR_AUSENTE'&&e.uncertain);assert.equal(c.fences,1);
+});
