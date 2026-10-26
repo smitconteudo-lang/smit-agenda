@@ -1,4 +1,4 @@
-# Continuidade técnica — SMIT Agenda 0.5
+# Continuidade técnica — SMIT Agenda 0.6
 
 A prioridade é fechar o agendamento nas redes solicitadas antes de desenvolver
 métricas. O sistema deve continuar executando no GitHub, Netlify e Supabase sem
@@ -58,3 +58,10 @@ Deploys de produção consomem créditos. Agrupe mudanças; scripts/should-build
 ignora mudanças apenas em documentação ou SQL. Migrações são aplicadas uma única
 vez e exigem compatibilidade com o código implantado. Não altere políticas para
 liberar tabelas de credenciais, fila ou autorizações ao navegador.
+
+## Preparação para ensaio
+
+A versão 0.6 inclui simulação somente de leitura, roteiro na tela inicial,
+resultado exportável e pendências por conta. Veja docs/SIMULACAO.md.
+A conferência de acesso Meta agora atualiza os escopos quando retornados pelo
+provedor e invalida uma identidade cujo token foi revogado.

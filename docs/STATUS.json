@@ -1,5 +1,5 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "timezone": "America/Sao_Paulo",
   "implemented": [
     "private_media_upload",
@@ -11,7 +11,11 @@
     "background_worker",
     "encrypted_job_progress",
     "durable_send_fence",
-    "read_only_reconciliation"
+    "read_only_reconciliation",
+    "read_only_preflight_simulation",
+    "connection_readiness",
+    "oauth_popup",
+    "live_meta_scope_verification"
   ],
   "publishing_adapters": [
     "instagram",
@@ -22,7 +26,7 @@
   "other_destinations": "TikTok and additional networks require separate official adapters and authorization.",
   "metrics_collection_implemented": false,
   "tests": {
-    "node_tests": 35,
+    "node_tests": 43,
     "provider_responses": "simulated",
     "database_checks": "tests/queue-rollback.sql inside rollback transaction"
   },

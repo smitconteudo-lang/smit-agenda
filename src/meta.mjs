@@ -81,7 +81,12 @@ export async function metaRoute({req,url,path,body,me,env,json,fetcher=fetch}){
   const accounts=await admin('smit_accounts?id=eq.'+match[1]+'&select=id,channel,remote_id');if(accounts.length!==1)throw fail(404,'Conta não encontrada.');
   const secrets=await admin('smit_account_secrets?account_id=eq.'+match[1]);if(secrets.length!==1)throw fail(409,'Reconecte esta conta.');
   if(secrets[0].expires_at&&Date.parse(secrets[0].expires_at)<=Date.now())throw fail(409,'O acesso expirou. Reconecte esta conta.');
-  const account=accounts[0],token=unseal(secrets[0].ciphertext,key,'account:'+account.id).token,actual=await graph(account.remote_id,token,{fields:'id,name'});if(String(actual.id)!==account.remote_id)throw fail(502,'A identidade não confere.');await admin('smit_accounts?id=eq.'+account.id,'PATCH',{verified_at:new Date().toISOString()});return json({verified:true});
+  const account=accounts[0],token=unseal(secrets[0].ciphertext,key,'account:'+account.id).token;
+  const debug=await request('https://graph.facebook.com/'+version+'/debug_token?'+new URLSearchParams({input_token:token}),{headers:{Authorization:'Bearer '+app+'|'+appSecret}});
+  if(!debug.data?.is_valid||String(debug.data.app_id)!==app){await admin('smit_accounts?id=eq.'+account.id,'PATCH',{verified_at:null});throw fail(409,'Acesso inválido ou de outro aplicativo. Reconecte a conta.');}
+  const actual=await graph(account.remote_id,token,{fields:'id,name'});if(String(actual.id)!==account.remote_id)throw fail(502,'A identidade não confere.');
+  const scopes=Array.isArray(debug.data.scopes)?debug.data.scopes.filter(s=>typeof s==='string'):null;
+  await admin('smit_accounts?id=eq.'+account.id,'PATCH',{verified_at:new Date().toISOString(),...(scopes?{scopes}:{})});return json({verified:true,permissions_checked:!!scopes});
  }
  throw fail(404,'Operação de conexão não disponível.');
 }

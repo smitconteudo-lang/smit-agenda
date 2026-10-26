@@ -4,12 +4,21 @@ Agenda editorial independente: código no GitHub, hospedagem e processamento no
 Netlify, autenticação, banco e mídia privada no Supabase. Métricas ficam para
 uma etapa posterior. A fila não depende de uma sessão do ChatGPT.
 
-## Versão 0.5
+## Versão 0.6
 
 Editor com upload privado, biblioteca de arquivos enviados, ordem de imagens,
 rascunhos versionados, calendário de São Paulo, seleção explícita de contas e
 legendas por destino. A fila guarda a versão e registra o resultado por conta.
 Editar cancela os envios ainda pendentes da versão anterior.
+
+A tela de Contas separa aplicativo, autorização, identidade, permissão e
+confirmação de envio. A autorização abre em janela própria quando permitida pelo
+navegador; se bloqueada, continua na aba atual. Verificar acesso Meta consulta
+a validade do token e os escopos disponíveis no provedor.
+
+Simular sem publicar confere o rascunho e as contas usando dados registrados,
+sem criar jobs ou chamar APIs de publicação. O resultado pode ser exportado.
+A aceitação final da mídia só é comprovada em um envio real autorizado.
 
 Adaptadores implementados: Instagram (imagem JPEG, carrossel de imagens, Reel e
 Story), Facebook Página (texto, imagens, Reel e Story), LinkedIn organização
