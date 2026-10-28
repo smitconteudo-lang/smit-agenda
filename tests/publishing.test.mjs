@@ -140,3 +140,18 @@ for(const discrepancy of ['none','caption','channel','privacy','title','id','pro
  const invoke=()=>reconcile({client,env:config,me:{id:'member'},id:'job',remote,fetcher:async(u,o)=>{reads++;assert.equal(o.method,undefined);return json({items:[{id:discrepancy==='id'?'another-id':remote,snippet:{channelId:discrepancy==='channel'?'UCother':'UCtest',title:discrepancy==='title'?'another title':'expected title',description:discrepancy==='caption'?'another description':'expected description'},status:{privacyStatus:discrepancy==='privacy'?'private':'public',uploadStatus:discrepancy==='processing'?'uploaded':'processed'}}]});}});
  if(discrepancy==='none'){assert.equal((await invoke()).confirmed,true);assert.equal(saved,1);}else{await assert.rejects(invoke);assert.equal(saved,0);}assert.equal(reads,discrepancy==='known-id'?0:1);
 });
+
+test('YouTube resumes an empty upload session at byte zero without creating a second video',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let chunks=0,reads=0;
+ c.fetcher=async(u,o)=>{const url=new URL(u);if(url.hostname==='storage.example'){reads++;assert.equal(o.headers.Range,'bytes=0-5');return new Response(new Uint8Array([1,2,3,4,5,6]),{headers:{'Content-Length':'6'}});}assert.equal(url.pathname,'/resumable/existing');if(o.headers['Content-Range']==='bytes */6')return new Response(null,{status:308});chunks++;assert.equal(o.headers['Content-Range'],'bytes 0-5/6');assert.equal(o.body.byteLength,6);return json({id:'uploaded-video'},201);};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.progress.video,'uploaded-video');assert.deepEqual([chunks,reads,c.fences],[1,1,0]);
+});
+test('YouTube recovers the completed upload response without retransmitting bytes',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async(u,o)=>{calls++;assert.equal(String(u),'https://www.googleapis.com/resumable/existing');assert.equal(o.headers['Content-Range'],'bytes */6');assert.equal(o.body,undefined);return json({id:'already-uploaded'},200);};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.progress.video,'already-uploaded');assert.equal(calls,1);assert.equal(c.fences,0);
+});
+test('YouTube refuses an upload offset outside the file instead of reading or resending media',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async()=>{calls++;return new Response(null,{status:308,headers:{Range:'bytes=0-99'}});};await assert.rejects(()=>advancePublication(c),e=>e.code==='UPLOAD_SEM_RESULTADO'&&e.uncertain);assert.equal(calls,1);assert.equal(c.fences,0);
+});
