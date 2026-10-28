@@ -81,8 +81,10 @@ export async function advancePublication(ctx){
    if(result.status!==308){const value=await result.json();if(!value.id)throw new ProviderError('VIDEO_AUSENTE');s.video=value.id;}return pending(1);
   }
   const {d}=await data('https://www.googleapis.com/youtube/v3/videos?'+new URLSearchParams({part:'id,snippet,status,processingDetails',id:s.video}),{headers});const actual=d.items?.[0];if(!actual||actual.snippet?.channelId!==p.remote_id)throw new ProviderError('CANAL_NAO_CONFERE');
+  if(['deleted','failed','rejected'].includes(actual.status?.uploadStatus))throw new ProviderError('VIDEO_ENVIO_'+actual.status.uploadStatus.toUpperCase());
   if(['failed','terminated'].includes(actual.processingDetails?.processingStatus))throw new ProviderError('VIDEO_PROCESSAMENTO');if(actual.processingDetails?.processingStatus!=='succeeded'||!due)return pending();
   const {d:result}=await data('https://www.googleapis.com/youtube/v3/videos?part=status',{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({id:s.video,status:{privacyStatus:p.options.privacy,selfDeclaredMadeForKids:p.options.made_for_kids}})},true);
+  if(String(result.id)!==String(s.video))throw new ProviderError('VIDEO_NAO_CONFERE',true);
   if(result.status?.privacyStatus!==p.options.privacy)throw new ProviderError('VISIBILIDADE_NAO_CONFIRMADA',true);return done(result.id);
  }
  throw new ProviderError('REDE_NAO_SUPORTADA');
