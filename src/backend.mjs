@@ -10,6 +10,8 @@ export const bucket='smit-media';
 export function validatePublication(post,account,media,options={}){
  const channel=account.channel,caption=options.caption??post.caption,title=options.title??post.title,format=options.format??post.format;
  if(typeof caption!=='string'||caption.length>({instagram:2200,facebook_page:5000,linkedin:3000,youtube:5000}[channel]||0))throw problem(400,'A legenda ultrapassa o limite de '+channel+'.');
+ if(options.trial_reel!==undefined&&typeof options.trial_reel!=='boolean')throw problem(400,'A opção Reel de teste deve ser verdadeira ou falsa.');
+ if(options.trial_reel&&(channel!=='instagram'||format!=='Vídeo / Reel'))throw problem(400,'Reel de teste exige um vídeo e uma conta Instagram.');
  const videos=media.filter(m=>m.mime==='video/mp4'),images=media.filter(m=>m.mime.startsWith('image/'));
  if(media.some(m=>m.status!=='ready')||media.length>10)throw problem(400,'Aguarde o envio de todas as mídias.');
  if(images.some(m=>m.bytes>8*1024*1024))throw problem(400,'Use imagens de até 8 MB.');
@@ -22,5 +24,5 @@ export function validatePublication(post,account,media,options={}){
  if(channel==='instagram'&&images.some(m=>m.mime!=='image/jpeg'))throw problem(400,'O Instagram exige imagens JPEG. Exporte a arte em JPG.');
  if(channel==='youtube'&&(format!=='Vídeo / Reel'||!title?.trim()||title.length>100||typeof options.made_for_kids!=='boolean'||!['public','unlisted','private'].includes(options.privacy)))throw problem(400,'No YouTube, informe vídeo, título (até 100 caracteres), público infantil e visibilidade.');
  if(channel==='linkedin'&&format==='Story')throw problem(400,'LinkedIn não possui publicação de Stories.');
- return {channel,remote_id:account.remote_id,caption,title,format,media:media.map(m=>({id:m.id,object_path:m.object_path,mime:m.mime,bytes:m.bytes,name:m.name})),options:{made_for_kids:options.made_for_kids,privacy:options.privacy||'public',notify_subscribers:options.notify_subscribers!==false}};
+ return {channel,remote_id:account.remote_id,caption,title,format,media:media.map(m=>({id:m.id,object_path:m.object_path,mime:m.mime,bytes:m.bytes,name:m.name})),options:{trial_reel:options.trial_reel===true,made_for_kids:options.made_for_kids,privacy:options.privacy||'public',notify_subscribers:options.notify_subscribers!==false}};
 }
