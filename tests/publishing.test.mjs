@@ -119,3 +119,24 @@ test('Instagram video Story uses STORIES and does not send trial parameters or c
  assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.fences,0);
  c.payload.options.trial_reel=true;await assert.rejects(()=>advancePublication(c),/REEL_TESTE_FORMATO/);
 });
+
+for(const uploadStatus of ['rejected','failed','deleted'])test('YouTube '+uploadStatus+' video fails before any public send',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async(u,o)=>{calls++;assert.equal(o.method,undefined);return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus},processingDetails:{processingStatus:'succeeded'}}]});};
+ await assert.rejects(()=>advancePublication(c),e=>e.code==='VIDEO_ENVIO_'+uploadStatus.toUpperCase()&&!e.uncertain);assert.equal(c.fences,0);assert.equal(calls,1);
+});
+test('YouTube still processing waits without changing visibility or resending the file',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];c.fetcher=async(u,o)=>{assert.equal(o.method,undefined);return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus:'uploaded'},processingDetails:{processingStatus:'processing'}}]});};
+ const result=await advancePublication(c);assert.equal(result.status,'pending');assert.equal(result.progress.video,'video');assert.equal(c.fences,0);
+});
+for(const response of ['wrong-id','wrong-privacy','timeout'])test('YouTube '+response+' on visibility update requires reconciliation',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];
+ c.fetcher=async(u,o)=>{if(o.method==='PUT'){if(response==='timeout')throw Error('timeout');return json({id:response==='wrong-id'?'another-video':'video',status:{privacyStatus:response==='wrong-privacy'?'private':'public'}});}return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus:'processed'},processingDetails:{processingStatus:'succeeded'}}]});};
+ await assert.rejects(()=>advancePublication(c),e=>e instanceof ProviderError&&e.uncertain);assert.equal(c.fences,1);
+});
+for(const discrepancy of ['none','caption','channel','privacy','title','id','processing','known-id'])test('YouTube reconciliation checks '+discrepancy+' without publishing',async()=>{
+ const remote='abcdefghijk',key=settings.SMIT_TOKEN_ENCRYPTION_KEY;let saved=0,reads=0;
+ const client={from:t=>({select:()=>({eq:()=>({single:async()=>({data:t==='smit_jobs'?{status:'unknown',account_id:'account',remote_id:discrepancy==='known-id'?'other-id':remote,payload:{caption:'expected description',title:'expected title',options:{privacy:'public'}}}:t==='smit_accounts'?{id:'account',remote_id:'UCtest',channel:'youtube'}:{ciphertext:seal({token:'test-only'},key,'account:account')}})})})}),rpc:async()=>{saved++;return {data:true};}};
+ const invoke=()=>reconcile({client,env:config,me:{id:'member'},id:'job',remote,fetcher:async(u,o)=>{reads++;assert.equal(o.method,undefined);return json({items:[{id:discrepancy==='id'?'another-id':remote,snippet:{channelId:discrepancy==='channel'?'UCother':'UCtest',title:discrepancy==='title'?'another title':'expected title',description:discrepancy==='caption'?'another description':'expected description'},status:{privacyStatus:discrepancy==='privacy'?'private':'public',uploadStatus:discrepancy==='processing'?'uploaded':'processed'}}]});}});
+ if(discrepancy==='none'){assert.equal((await invoke()).confirmed,true);assert.equal(saved,1);}else{await assert.rejects(invoke);assert.equal(saved,0);}assert.equal(reads,discrepancy==='known-id'?0:1);
+});
