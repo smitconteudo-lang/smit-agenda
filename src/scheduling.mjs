@@ -15,7 +15,7 @@ export async function schedulingRoute({req,path,body,me,env,json,client=backend(
   const signed=await checked(storage.createSignedUploadUrl(object_path,{upsert:false}));
   return json({id,upload_url:signed.signedUrl,storage_origin:new URL(env('SMIT_SUPABASE_URL')).origin});
  }
- let match=path.match(/^\/media\/([0-9a-f-]{36})\/(complete|preview)$/i);
+ let match=path.match(/^\/media\/([0-9a-f-]{36})\/(complete|preview|download)$/i);
  if(match){
   const media=await checked(client.from('smit_media').select('*').eq('id',match[1]).single());
   if(match[2]==='complete'&&req.method==='POST'){
@@ -25,7 +25,11 @@ export async function schedulingRoute({req,path,body,me,env,json,client=backend(
    const {signedUrl}=await checked(storage.createSignedUrl(media.object_path,60));const response=await fetch(signedUrl,{headers:{Range:'bytes=0-31'},redirect:'error',signal:AbortSignal.timeout(15000)});if(!response.ok)throw problem(502,'O armazenamento não confirmou o arquivo.');const reader=response.body.getReader();const chunks=[];let count=0;try{while(count<32){const part=await reader.read();if(part.done)break;chunks.push(Buffer.from(part.value).subarray(0,32-count));count+=chunks.at(-1).length;}}finally{await reader.cancel();}if(!mediaSignature(Buffer.concat(chunks),media.mime))throw problem(400,'O conteúdo do arquivo não corresponde ao formato informado.');
    await checked(client.from('smit_media').update({status:'ready'}).eq('id',media.id));return json({ready:true});
   }
-  if(match[2]==='preview'&&req.method==='GET'){if(media.status!=='ready')throw problem(409,'Upload incompleto.');return json(await checked(storage.createSignedUrl(media.object_path,300)));}
+  if(['preview','download'].includes(match[2])&&req.method==='GET'){
+   if(media.status!=='ready')throw problem(409,'Upload incompleto.');
+   const options=match[2]==='download'?{download:media.name}:undefined;
+   return json(await checked(storage.createSignedUrl(media.object_path,300,options)));
+  }
  }
  match=path.match(/^\/posts\/([0-9a-f-]{36})\/(schedule|simulate|cancel)$/i);
  if(match&&req.method==='POST'){

@@ -1,4 +1,4 @@
-import {csrf,equal,cookieToken,sameOrigin,allowedEmail} from '../../src/security.mjs';
+import {csrf,equal,cookieToken,sameOrigin,allowedEmail,localDate} from '../../src/security.mjs';
 import {metaRoute,configured as metaConfigured} from '../../src/meta.mjs';
 import {providerRoute,providerStatus} from '../../src/providers.mjs';
 import {backend,checked,publishingOn,safeJob} from '../../src/backend.mjs';
@@ -49,9 +49,16 @@ export default async function handler(req){try{
   return json(await db('smit_settings?id=eq.workspace','PATCH',{brand:{name:body.name.trim(),guidelines:body.guidelines},updated_at:new Date().toISOString()}));
  }
  if(path==='/posts'&&req.method==='POST'){
-  if(!/^[0-9a-f-]{36}$/i.test(body.id)||!Number.isInteger(body.version)||body.version<0||typeof body.title!=='string'||!body.title.trim()||body.title.length>120||typeof body.caption!=='string'||body.caption.length>5000||typeof body.front!=='string'||body.front.length>80||typeof body.media_name!=='string'||body.media_name.length>255||!['Imagem','Carrossel','Vídeo / Reel','Texto','Story'].includes(body.format)||!Array.isArray(body.destinations)||body.destinations.length>4||body.destinations.some(x=>!['instagram','facebook_page','linkedin','youtube'].includes(x))||!Array.isArray(body.media_ids)||body.media_ids.length>10||new Set(body.media_ids).size!==body.media_ids.length||body.media_ids.some(id=>!/^[0-9a-f-]{36}$/i.test(id)))throw failure(400,'Confira os campos da publicação.');
-  const client=backend(env);if(body.media_ids.length){const rows=await checked(client.from('smit_media').select('id').in('id',body.media_ids).eq('status','ready'));if(rows.length!==body.media_ids.length)throw failure(400,'Aguarde o envio das mídias.');}
-  const payload={id:body.id,version:body.version+1,title:body.title.trim(),caption:body.caption,front:body.front,media_name:body.media_name,media_ids:body.media_ids,format:body.format,destinations:[...new Set(body.destinations)],status:'draft',planned_local:null,approved_version:null,updated:Date.now()/1000};
+  if(!/^[0-9a-f-]{36}$/i.test(body.id)||!Number.isInteger(body.version)||body.version<0||typeof body.title!=='string'||!body.title.trim()||body.title.length>120||typeof body.caption!=='string'||body.caption.length>5000||typeof body.front!=='string'||body.front.length>80||typeof body.media_name!=='string'||body.media_name.length>255||!['Imagem','Carrossel','Vídeo / Reel','Texto','Story'].includes(body.format)||!Array.isArray(body.destinations)||body.destinations.length>5||body.destinations.some(x=>!['instagram','facebook_page','linkedin','youtube','tiktok'].includes(x))||!Array.isArray(body.media_ids)||body.media_ids.length>10||new Set(body.media_ids).size!==body.media_ids.length||body.media_ids.some(id=>!/^[0-9a-f-]{36}$/i.test(id)))throw failure(400,'Confira os campos da publicação.');
+  const client=backend(env);
+  const media=body.media_ids.length?await checked(client.from('smit_media').select('mime').in('id',body.media_ids).eq('status','ready')):[];
+  if(media.length!==body.media_ids.length)throw failure(400,'Aguarde o envio das mídias.');
+  const tiktokWhen=body.tiktok_when??null;
+  if(tiktokWhen!==null){
+   if(!body.destinations.includes('tiktok')||media.length!==1||media[0].mime!=='video/mp4')throw failure(400,'Vincule um único MP4 para planejar no TikTok.');
+   try{if(typeof tiktokWhen!=='string')throw Error();localDate(tiktokWhen);}catch{throw failure(400,'Informe uma data e um horário válidos de São Paulo para o TikTok.');}
+  }
+  const payload={id:body.id,version:body.version+1,title:body.title.trim(),caption:body.caption,front:body.front,media_name:body.media_name,media_ids:body.media_ids,format:body.format,destinations:[...new Set(body.destinations)],status:'draft',planned_local:null,tiktok_when:tiktokWhen,approved_version:null,updated:Date.now()/1000};
   return json(await checked(client.rpc('smit_save_draft',{p_actor:me.id,p_id:body.id,p_expected:body.version,p_payload:payload})));
  }
  const match=path.match(/^\/posts\/([0-9a-f-]{36})\/plan$/i);

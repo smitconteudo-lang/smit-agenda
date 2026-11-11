@@ -38,3 +38,56 @@ test('online editor uploads privately and schedule sends only selected writable 
   assert.deepEqual(scheduled.account_ids,[ig,fb,yt]);assert.equal(scheduled.settings[ig].format,'Story');assert.equal(scheduled.settings[ig].trial_reel,false);assert.equal(scheduled.settings[fb].format,'Vídeo / Reel');assert.equal(scheduled.settings[yt].format,'Vídeo / Reel');assert.equal(scheduled.settings[yt].made_for_kids,false);assert.equal(scheduled.settings[yt].privacy,'private');
  }finally{w.close();}
 });
+
+test('TikTok uses its own calendar date and opens a handoff without scheduling an API job',async()=>{
+ const html=readFileSync('public/index.html','utf8'),scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]);
+ const dom=new JSDOM(html.replace(/<script>[\s\S]*?<\/script>/g,''),{url:'https://smit.example/#calendar',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+ const media={id:'00000000-0000-4000-8000-000000000005',name:'video.mp4',mime:'video/mp4',bytes:100};
+ const post={id:'00000000-0000-4000-8000-000000000006',version:1,title:'Vídeo SMIT',caption:'Legenda TikTok',destinations:['youtube'],status:'draft',format:'Vídeo / Reel',media_ids:[media.id]};
+ const data={brand:{name:'SMIT'},posts:[post],accounts:[],reports:[],jobs:[],media:[media]};
+ const calls=[];let saved,copied,download;
+ w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+ w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+ w.HTMLAnchorElement.prototype.click=function(){download=this.href;};
+ Object.defineProperty(w.navigator,'clipboard',{value:{writeText:async value=>{copied=value;}}});
+ w.fetch=async(url,options)=>{
+  calls.push(url);
+  if(url==='/api/me')return Response.json({id:'member',csrf:'csrf-test'});
+  if(url==='/api/workspace')return Response.json(data);
+  if(url==='/api/posts'){
+   saved=JSON.parse(options.body);
+   data.posts=[{...saved,version:2,status:'scheduled',planned_local:'2099-10-22T11:00'}];
+   return Response.json(data.posts[0]);
+  }
+  if(url.endsWith('/preview'))return Response.json({signedUrl:'https://storage-test.supabase.co/preview'});
+  if(url.endsWith('/download'))return Response.json({signedUrl:'https://storage-test.supabase.co/download?download=video.mp4'});
+  throw Error('Unexpected '+url);
+ };
+ try{
+  scripts.forEach((s,i)=>w.eval(s+(i===scripts.length-1?'\nwindow.__qa={openEditor,setMonth:value=>{month=value;render();}};':'')));
+  await new Promise(r=>setTimeout(r,10));
+  w.__qa.openEditor(post.id);
+  const f=w.document.querySelector('#editor'),tiktok=f.querySelector('[value="tiktok"]');
+  assert.equal(w.document.querySelector('#tiktok-plan-fields').hidden,true);
+  tiktok.checked=true;
+  tiktok.dispatchEvent(new w.Event('change'));
+  assert.equal(w.document.querySelector('#tiktok-plan-fields').hidden,false);
+  f.elements.tiktok_when.value='2099-10-23T14:30';
+  f.dispatchEvent(new w.Event('submit',{cancelable:true}));
+  await new Promise(r=>setTimeout(r,10));
+  assert.deepEqual(saved.destinations,['youtube','tiktok']);
+  assert.equal(saved.tiktok_when,'2099-10-23T14:30');
+  w.__qa.setMonth(new w.Date(2099,9,1));
+  const calendar=[...w.document.querySelectorAll('.cal-post')];
+  assert.deepEqual(calendar.map(b=>b.textContent),['11:00 · Vídeo SMIT','14:30 · TikTok · Vídeo SMIT']);
+  calendar[1].click();
+  w.document.querySelector('#detail-tiktok').click();
+  assert.equal(w.document.querySelector('#tiktok-caption').value,'Legenda TikTok');
+  assert.equal(w.document.querySelector('#modal a').href,'https://www.tiktok.com/tiktokstudio/upload');
+  await w.document.querySelector('#copy-tiktok-caption').onclick();
+  assert.equal(copied,'Legenda TikTok');
+  await w.document.querySelector('#download-tiktok-video').onclick();
+  assert.match(download,/supabase\.co\/download\?download=video\.mp4/);
+  assert.equal(calls.some(path=>/\/(schedule|simulate)$/.test(path)),false);
+ }finally{w.close();}
+});
