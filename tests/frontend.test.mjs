@@ -91,3 +91,43 @@ test('TikTok uses its own calendar date and opens a handoff without scheduling a
   assert.equal(calls.some(path=>/\/(schedule|simulate)$/.test(path)),false);
  }finally{w.close();}
 });
+
+test('hosted demo opens without login and plans a simulated Short without any network calls',async()=>{
+ const html=readFileSync('public/index.html','utf8'),scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]);
+ const dom=new JSDOM(html.replace(/<script>[\s\S]*?<\/script>/g,''),{url:'https://smit.example/?demo=1',runScripts:'outside-only'}),w=dom.window;
+ const $=selector=>w.document.querySelector(selector);
+ const network=[];
+ w.fetch=async url=>{network.push(url);throw Error('Demo must stay offline');};
+ w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+ w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+ w.URL.createObjectURL=()=> 'blob:video';
+ w.URL.revokeObjectURL=()=>{};
+ try{
+  scripts.forEach((s,i)=>w.eval(s+(i===scripts.length-1?'\nwindow.__qa={openPlan,getData:()=>DATA};':'')));
+  assert.equal($('#login-form'),null);
+  assert.match($('#mode-label').textContent,/Teste sem login/);
+  $('#new-post').click();
+  const editor=$('#editor'),file=$('#preview-file');
+  editor.elements.title.value='Short de teste';
+  editor.elements.format.value='Vídeo / Reel';
+  Object.defineProperty(file,'files',{value:[new w.File(['MP4'],'teste.mp4',{type:'video/mp4'})]});
+  await file.onchange({target:file});
+  editor.dispatchEvent(new w.Event('submit',{cancelable:true}));
+  await new Promise(r=>setTimeout(r,10));
+  const post=w.__qa.getData().posts[0];
+  w.__qa.openPlan(post);
+  const form=$('#plan-form');
+  form.elements.when.value='2099-10-22T10:30';
+  $('[name="account"]').checked=true;
+  $('[data-kids]').value='false';
+  assert.equal($('#schedule-submit').disabled,true);
+  await $('#simulate-submit').onclick();
+  assert.match($('#preflight-results').textContent,/Formulário de teste conferido/);
+  assert.equal($('#schedule-submit').disabled,false);
+  form.dispatchEvent(new w.Event('submit',{cancelable:true}));
+  await new Promise(r=>setTimeout(r,10));
+  assert.equal(post.planned_local,'2099-10-22T10:30');
+  assert.equal(post.status,'planned');
+  assert.deepEqual(network,[]);
+ }finally{w.close();}
+});
