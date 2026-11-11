@@ -22,8 +22,21 @@ test('preflight collects account-specific issues and detects existing jobs and e
  const results=inspectDestinations(args);assert.equal(results[0].ok,true);assert.equal(results[1].ok,false);assert.equal(results[0].snapshot.media[0].object_path,media.object_path);
  assert.match(inspectDestinations({...args,jobs:[{status:'published'}]})[0].issues.join(),/já possui fila/);
  assert.equal(inspectDestinations({...args,jobs:[{status:'cancelled'}]})[0].ok,true);
- assert.match(inspectDestinations({...args,at:new Date('2100-01-01')})[0].issues.join(),/expira antes/);
+ assert.match(inspectDestinations({...args,at:new Date('2100-01-01')})[0].issues.join(),/Reconecte a conta/);
  assert.match(inspectDestinations({...args,media:[{...media,mime:'image/png'}]})[0].issues.join(),/JPEG/);
+});
+test('YouTube accepts a future schedule after token expiry only with a usable stored refresh credential',()=>{
+ const youtube={...ig,channel:'youtube',scopes:['https://www.googleapis.com/auth/youtube.force-ssl']};
+ const expires_at='2026-11-11T11:00:00Z';
+ const now=Date.parse('2026-11-11T12:00:00Z'),at=new Date('2026-11-12T12:00:00Z');
+ const args={post:{...post,format:'Vídeo / Reel'},accounts:[youtube],media:[{...media,mime:'video/mp4'}],settings:{[youtube.id]:{made_for_kids:false,privacy:'public'}},at,config,now};
+ const stored=refresh_token=>({...secret,expires_at,ciphertext:seal({token:'fixture-access',refresh_token},values.SMIT_TOKEN_ENCRYPTION_KEY,'account:'+youtube.id)});
+ const renewable=stored('fixture-refresh');
+ assert.equal(accountReadiness(youtube,renewable,config,now).renewable,true);
+ assert.equal(inspectDestinations({...args,secrets:[renewable]})[0].ok,true);
+ assert.match(inspectDestinations({...args,secrets:[stored(null)],now:now-2*3600000})[0].issues.join(),/horário escolhido/);
+ assert.equal(inspectDestinations({...args,secrets:[{...renewable,ciphertext:'invalid'}]})[0].ok,false);
+ assert.ok(!JSON.stringify(accountReadiness(youtube,renewable,config,now)).includes('fixture-'));
 });
 function clientFixture(){const calls=[],tables={smit_posts:[{version:1,payload:post}],smit_accounts:[ig,fb],smit_media:[media],smit_account_secrets:[secret,{...secret,account_id:fb.id}],smit_jobs:[]};return {calls,client:{storage:{from:()=>({})},from:table=>{const filters=[];const chain={select:()=>chain,in:(k,v)=>{filters.push(r=>v.includes(r[k]));return chain;},eq:(k,v)=>{filters.push(r=>r[k]===v);return chain;},single:async()=>({data:tables[table].filter(r=>filters.every(f=>f(r)))[0]}),then:(resolve,reject)=>{calls.push({type:'read',table});return Promise.resolve({data:tables[table].filter(r=>filters.every(f=>f(r)))}).then(resolve,reject);}};if(table==='smit_posts')chain.eq=()=>chain;return chain;},rpc:async(name,args)=>{calls.push({type:'write',name,args});return {data:{scheduled:args.p_destinations.length}};}}};}
 const when=()=>new Date(Date.now()+15*60000-3*3600000).toISOString().slice(0,16);

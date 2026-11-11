@@ -104,3 +104,54 @@ test('Instagram rejects media processing failure before attempting publication',
 test('Instagram successful HTTP without publication id remains uncertain',async()=>{
  const c=context('instagram',{progress:{container:'private'}});c.fetcher=async u=>String(u).includes('media_publish')?json({success:true}):json({status_code:'FINISHED'});await assert.rejects(()=>advancePublication(c),e=>e.code==='IDENTIFICADOR_AUSENTE'&&e.uncertain);assert.equal(c.fences,1);
 });
+
+test('trial Reel validates Instagram video only and preserves explicit manual sharing',async()=>{
+ const post={caption:'Test',title:'Title',format:'Vídeo / Reel'},account={channel:'instagram',remote_id:'123'};
+ assert.equal(validatePublication(post,account,[video],{trial_reel:true}).options.trial_reel,true);
+ for(const [a,p,o] of [[{channel:'youtube'},post,{trial_reel:true}],[account,{...post,format:'Story'},{trial_reel:true}],[account,post,{trial_reel:'true'}]])assert.throws(()=>validatePublication(p,a,[video],o),/teste/);
+ const c=context('instagram');c.payload=validatePublication(post,account,[video],{trial_reel:true});let containers=0;
+ c.fetcher=async(u,o)=>{if(new URL(u).pathname.endsWith('/media')){containers++;const b=new URLSearchParams(o.body);assert.equal(b.get('media_type'),'REELS');assert.deepEqual(JSON.parse(b.get('trial_params')),{graduation_strategy:'MANUAL'});return json({id:'trial-container'});}if(new URL(u).pathname.endsWith('/media_publish')){assert.equal(c.fences,1);return json({id:'trial-published'});}return json({status_code:'FINISHED'});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.fences,0);assert.equal((await advancePublication(c)).remote_id,'trial-published');assert.equal(containers,1);
+});
+test('Instagram video Story uses STORIES and does not send trial parameters or caption',async()=>{
+ const c=context('instagram');c.payload.format='Story';c.payload.media=[video];
+ c.fetcher=async(u,o)=>{const b=new URLSearchParams(o.body);assert.equal(b.get('media_type'),'STORIES');assert.equal(b.has('trial_params'),false);assert.equal(b.has('caption'),false);return json({id:'story-container'});};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.fences,0);
+ c.payload.options.trial_reel=true;await assert.rejects(()=>advancePublication(c),/REEL_TESTE_FORMATO/);
+});
+
+for(const uploadStatus of ['rejected','failed','deleted'])test('YouTube '+uploadStatus+' video fails before any public send',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async(u,o)=>{calls++;assert.equal(o.method,undefined);return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus},processingDetails:{processingStatus:'succeeded'}}]});};
+ await assert.rejects(()=>advancePublication(c),e=>e.code==='VIDEO_ENVIO_'+uploadStatus.toUpperCase()&&!e.uncertain);assert.equal(c.fences,0);assert.equal(calls,1);
+});
+test('YouTube still processing waits without changing visibility or resending the file',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];c.fetcher=async(u,o)=>{assert.equal(o.method,undefined);return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus:'uploaded'},processingDetails:{processingStatus:'processing'}}]});};
+ const result=await advancePublication(c);assert.equal(result.status,'pending');assert.equal(result.progress.video,'video');assert.equal(c.fences,0);
+});
+for(const response of ['wrong-id','wrong-privacy','timeout'])test('YouTube '+response+' on visibility update requires reconciliation',async()=>{
+ const c=context('youtube',{progress:{video:'video'}});c.payload.media=[video];
+ c.fetcher=async(u,o)=>{if(o.method==='PUT'){if(response==='timeout')throw Error('timeout');return json({id:response==='wrong-id'?'another-video':'video',status:{privacyStatus:response==='wrong-privacy'?'private':'public'}});}return json({items:[{id:'video',snippet:{channelId:'UCtest'},status:{uploadStatus:'processed'},processingDetails:{processingStatus:'succeeded'}}]});};
+ await assert.rejects(()=>advancePublication(c),e=>e instanceof ProviderError&&e.uncertain);assert.equal(c.fences,1);
+});
+for(const discrepancy of ['none','caption','channel','privacy','title','id','processing','known-id'])test('YouTube reconciliation checks '+discrepancy+' without publishing',async()=>{
+ const remote='abcdefghijk',key=settings.SMIT_TOKEN_ENCRYPTION_KEY;let saved=0,reads=0;
+ const client={from:t=>({select:()=>({eq:()=>({single:async()=>({data:t==='smit_jobs'?{status:'unknown',account_id:'account',remote_id:discrepancy==='known-id'?'other-id':remote,payload:{caption:'expected description',title:'expected title',options:{privacy:'public'}}}:t==='smit_accounts'?{id:'account',remote_id:'UCtest',channel:'youtube'}:{ciphertext:seal({token:'test-only'},key,'account:account')}})})})}),rpc:async()=>{saved++;return {data:true};}};
+ const invoke=()=>reconcile({client,env:config,me:{id:'member'},id:'job',remote,fetcher:async(u,o)=>{reads++;assert.equal(o.method,undefined);return json({items:[{id:discrepancy==='id'?'another-id':remote,snippet:{channelId:discrepancy==='channel'?'UCother':'UCtest',title:discrepancy==='title'?'another title':'expected title',description:discrepancy==='caption'?'another description':'expected description'},status:{privacyStatus:discrepancy==='privacy'?'private':'public',uploadStatus:discrepancy==='processing'?'uploaded':'processed'}}]});}});
+ if(discrepancy==='none'){assert.equal((await invoke()).confirmed,true);assert.equal(saved,1);}else{await assert.rejects(invoke);assert.equal(saved,0);}assert.equal(reads,discrepancy==='known-id'?0:1);
+});
+
+test('YouTube resumes an empty upload session at byte zero without creating a second video',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let chunks=0,reads=0;
+ c.fetcher=async(u,o)=>{const url=new URL(u);if(url.hostname==='storage.example'){reads++;assert.equal(o.headers.Range,'bytes=0-5');return new Response(new Uint8Array([1,2,3,4,5,6]),{headers:{'Content-Length':'6'}});}assert.equal(url.pathname,'/resumable/existing');if(o.headers['Content-Range']==='bytes */6')return new Response(null,{status:308});chunks++;assert.equal(o.headers['Content-Range'],'bytes 0-5/6');assert.equal(o.body.byteLength,6);return json({id:'uploaded-video'},201);};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.progress.video,'uploaded-video');assert.deepEqual([chunks,reads,c.fences],[1,1,0]);
+});
+test('YouTube recovers the completed upload response without retransmitting bytes',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async(u,o)=>{calls++;assert.equal(String(u),'https://www.googleapis.com/resumable/existing');assert.equal(o.headers['Content-Range'],'bytes */6');assert.equal(o.body,undefined);return json({id:'already-uploaded'},200);};
+ assert.equal((await advancePublication(c)).status,'pending');assert.equal(c.progress.video,'already-uploaded');assert.equal(calls,1);assert.equal(c.fences,0);
+});
+test('YouTube refuses an upload offset outside the file instead of reading or resending media',async()=>{
+ const c=context('youtube',{progress:{upload_url:'https://www.googleapis.com/resumable/existing'}});c.payload.media=[video];let calls=0;
+ c.fetcher=async()=>{calls++;return new Response(null,{status:308,headers:{Range:'bytes=0-99'}});};await assert.rejects(()=>advancePublication(c),e=>e.code==='UPLOAD_SEM_RESULTADO'&&e.uncertain);assert.equal(calls,1);assert.equal(c.fences,0);
+});
